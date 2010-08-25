@@ -8,7 +8,7 @@ from django.db.models.query_utils import QueryWrapper
 from django.utils.translation import ugettext_lazy as _
 
 from taggit.forms import TagField
-from taggit.models import Tag, TaggedItem
+from taggit.models import TaggedItem
 from taggit.utils import require_instance_manager
 
 
@@ -41,6 +41,7 @@ class TaggableManager(object):
     def __init__(self, verbose_name=_("Tags"), through=None):
         self.use_gfk = through is None
         self.through = through or TaggedItem
+        self.tag_model = self.through._meta.get_field_by_name('tag')[0].rel.to
         self.rel = TaggableRel(to=self.through)
         self.verbose_name = verbose_name
         self.editable = True
@@ -84,7 +85,7 @@ class TaggableManager(object):
             return value._prepare()
         
         if lookup_type == "in":
-            if all(isinstance(v, Tag) for v in value):
+            if all(isinstance(v, self.tag_model) for v in value):
                 value = self.through.objects.filter(tag__in=value)
             elif all(isinstance(v, basestring) for v in value):
                 value = self.through.objects.filter(tag__name__in=value)
@@ -153,6 +154,7 @@ class TaggableManager(object):
 class _TaggableManager(models.Manager):
     def __init__(self, through):
         self.through = through
+        self.tag_model = self.through._meta.get_field_by_name('tag')[0].rel.to
         
     def get_query_set(self):
         return self.through.tags_for(self.model, self.instance)
@@ -163,8 +165,8 @@ class _TaggableManager(models.Manager):
     @require_instance_manager
     def add(self, *tags):
         for tag in tags:
-            if not isinstance(tag, Tag):
-                tag, _ = Tag.objects.get_or_create(name=tag)
+            if not isinstance(tag, self.tag_model):
+                tag, _ = self.tag_model.objects.get_or_create(name=tag)
             self.through.objects.get_or_create(tag=tag, **self._lookup_kwargs())
 
     @require_instance_manager
